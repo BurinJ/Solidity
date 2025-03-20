@@ -3,6 +3,7 @@ pragma solidity >=0.7.0 <0.9.0;
 
 import "./TimeUnit.sol";
 import "./CommitReveal.sol";
+
 contract RPS {
     uint public numPlayer = 0;
     uint public reward = 0;
@@ -16,35 +17,23 @@ contract RPS {
     CommitReveal public commitReveal0 = new CommitReveal();
     CommitReveal public commitReveal1 = new CommitReveal();
     uint public minutesElapsed = 0;
-    mapping(address => bool) public allowedPlayers;
+    mapping(address => mapping(address => uint256)) public allowance;
 
-    constructor() {
-        allowedPlayers[0x5B38Da6a701c568545dCfcB03FcB875f56beddC4] = true;
-        allowedPlayers[0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2] = true;
-        allowedPlayers[0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db] = true;
-        allowedPlayers[0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB] = true;
-    }
-
-    modifier onlyAllowed() {
-        require(allowedPlayers[msg.sender], "Not authorized to play");
-        _;
-    }
-
-    function addPlayer() public payable onlyAllowed {
+    function addPlayer() public payable  {
         require(numPlayer < 2, "Game already has two players");
         if (numPlayer > 0) {
             require(msg.sender != players[0], "Player already added");
         } else {
             timeUnit.setStartTime();
         }
-        require(msg.value == 1 ether, "Must send exactly 1 ether");
+        require(msg.value == 0.000001 ether, "Must send exactly 0.000001 ether");
         reward += msg.value;
         player_not_played[msg.sender] = true;
         players.push(msg.sender);
         numPlayer++;
     }
 
-     function withdrawEarly() public onlyAllowed {
+     function withdrawEarly() public {
         require(numPlayer > 0, "Game is empty");
         minutesElapsed = timeUnit.elapsedMinutes();
         require(minutesElapsed >= 10, "Timeout period not reached");
@@ -52,16 +41,24 @@ contract RPS {
         if (numPlayer == 1) {
             require(msg.sender == players[0], "Only player0 can withdraw");
             account0.transfer(reward);
+        } else if (numInput == 2) {
+            if (numReveal == 1){
+                require((!player_not_revealed[msg.sender]) && (msg.sender == players[0] || msg.sender == players[1]), "Only player who revealed");
+            } else if (numReveal == 2) {
+                return;
+            }
+            payable(msg.sender).transfer(reward);
         } else {
             address payable account1 = payable(players[1]);
             require(!player_not_played[msg.sender], "Only player who picked a choice can withdraw");
             account0.transfer(reward / 2);
             account1.transfer(reward / 2);
         }
+        
         _resetGame();
     }
 
-    function input(uint dataHash) public onlyAllowed {
+    function input(uint dataHash) public {
         require(numPlayer == 2, "Not enough players");
         require(player_not_played[msg.sender], "Already played");
 
@@ -72,10 +69,9 @@ contract RPS {
         player_not_played[msg.sender] = false;
         player_not_revealed[msg.sender] = true;
         numInput++;
-
     }
 
-    function inputReveal(uint revealHash) public onlyAllowed {
+    function inputReveal(uint revealHash) public {
         require(numInput == 2, "All players haven't committed a choice yet");
         require(player_not_revealed[msg.sender], "Already revealed");
         if (msg.sender == players[0]) {
